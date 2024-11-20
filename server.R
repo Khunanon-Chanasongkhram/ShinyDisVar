@@ -26,7 +26,7 @@ server <- function(input, output, session) {
     color = transparent(.7)
   )
 
-  # Initialize reactive value
+  # Initialize reactive values
   values <- reactiveValues(
     vcf_data = NULL,
     result_data = NULL,
