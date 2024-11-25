@@ -15,8 +15,7 @@ ui <- dashboardPage(
 
   dashboardHeader(
     title = div(
-      img(src = "ShinyDisVar_logo.gif", height = "50px"),
-      "ShinyDisVar"
+      img(src = "ShinyDisVar_logo.gif", height = "50px")
     )
   ),
 
@@ -117,7 +116,10 @@ ui <- dashboardPage(
                          "P-value Threshold",
                          value = 1e-7,
                          min = 0,
-                         step = 1e-8),
+                         max = 1,
+                         step = 1e-1,
+                         width = '100%'
+                         ),
 
             actionButton("runButton",
                          "Run Analysis",
@@ -310,11 +312,11 @@ ui <- dashboardPage(
               tags$br(),
               tags$br(),
               "ShinyDisVar is a Shiny-based web application for querying genetic variants and their associations with diseases and traits.",
-                      "The application integrates with DisVar R package and provides a user-friendly interface for analyzing VCF files.",
+              "The application integrates with DisVar R package and provides a user-friendly interface for analyzing VCF files.",
               tags$br(),
               "The web application was developed as part of the Master's degree thesis in the Molecular Biotechnology and Bioinformatics program, Division of Biological Science, Faculty of Science, Prince of Songkla University, Songkhla, Thailand."
             )
-            )
+          )
         )
       ),
       tabItem(

@@ -215,11 +215,9 @@ server <- function(input, output, session) {
           log_action("File Upload", "Completed")
 
           # Show success message
-          shinyalert(
-            title = "Success",
-            text = paste("Loaded", nrow(data), "variants successfully"),
-            type = "success"
-          )
+          shinyalert("Success",
+                     paste("Loaded", format(nrow(data), big.mark = ","), "variants"),
+                     type = "success")
         },
         error = function(e) {
           values$error_message <- e$message
