@@ -3,19 +3,19 @@
 
 library(DisVar)
 library(shiny)
-library(sqldf)
-library(data.table)
-library(dplyr)
-library(shinyjs)
-library(tools)
-library(DT)
-library(plotly)
-library(shinycssloaders)
-library(shinydashboard)
-library(waiter)
-library(shinyjs)
-library(shinyalert)
-library(writexl)
+library(sqldf) # For SQL-style data querying
+library(data.table) # Read large VCF file
+library(dplyr) # For data manipulation
+library(shinyjs) # Show/hide elements
+library(tools) # For file_ext function
+library(DT) # For interactive tables
+library(plotly) # For interactive plots
+library(shinycssloaders) # For loading animations
+library(shinydashboard) # For dashboard layout
+library(waiter) # For loading screen
+library(shinyjs) # For JavaScript interactions
+library(shinyalert) # For custom alerts
+library(writexl) # For writing Excel files
 
 options(shiny.maxRequestSize = 9000*1024^2)
 
@@ -23,7 +23,7 @@ server <- function(input, output, session) {
   # Initialize waiter loading screen
   w <- Waiter$new(
     html = spin_flower(),
-    color = transparent(.7)
+    color = transparent(.3)
   )
 
   # Initialize reactive values
@@ -165,11 +165,19 @@ server <- function(input, output, session) {
   # File preview handler
   output$vcfPreviewHeadTail <- renderDT({
     req(values$vcf_data)
-    preview_data <- rbind(
-      head(values$vcf_data, 10),
-      tail(values$vcf_data, 10)
-    )
+
+    # Check if total rows is less than 20
+    if (nrow(values$vcf_data) <= 20) {
+      preview_data <- values$vcf_data  # Show all rows if less than or equal to 20
+    } else {
+      preview_data <- rbind(
+        head(values$vcf_data, 10),
+        tail(values$vcf_data, 10)
+      )
+    }
+
     datatable(preview_data,
+              rownames = FALSE,
               options = list(
                 dom = 't',
                 scrollX = TRUE,
@@ -177,7 +185,7 @@ server <- function(input, output, session) {
               ))
   })
 
-  # Enhanced file upload handler with progress updates
+  # File upload handler with progress updates
   observeEvent(input$vcfFile, {
     w$show()
     validation <- validate_vcf(input$vcfFile)
@@ -235,6 +243,7 @@ server <- function(input, output, session) {
 
   # Run DisVar analysis
   observeEvent(input$runButton, {
+    log_action("Analysis", "Started")
     req(values$vcf_data)
     w$show()
 
@@ -289,17 +298,21 @@ server <- function(input, output, session) {
             DT::datatable(
               aligned_df,
               escape = FALSE,
+              rownames = FALSE,
               options = list(
                 scrollX = TRUE,
-                pageLength = 10
-              ),
+                pageLength = 10,
+                dom = 'lftip'
+                ),
               class = 'cell-border stripe'
             )
           })
 
+
           local_progress$set(message = "Generating visualizations...", value = 0.7)
 
           # Create interactive plots
+          # Variants per database
           output$variants_hits <- renderPlotly({
             plot_ly(
               data = values$result_data,
@@ -314,7 +327,19 @@ server <- function(input, output, session) {
               )
           })
 
+          # Top diseases or traits
           top_diseases <- values$result_data %>%
+            mutate(
+              # Standardize disease names
+              Disease = gsub("_", " ", Disease),  # Replace underscores with spaces
+              Disease = tolower(Disease),  # Convert to lowercase for uniformity
+              Disease = gsub("'s\\b", "", Disease, ignore.case = TRUE),  # Remove possessive 's
+              Disease = gsub("'$", "", Disease, ignore.case = TRUE),  # Remove stray trailing apostrophes
+              Disease = gsub("alzheimers|alzheimer'", "alzheimer", Disease, ignore.case = TRUE),  # Standardize 'alzheimer'
+              Disease = gsub("\\s*\\(.*?\\)", "", Disease),  # Remove ()
+              Disease = gsub("\\s+", " ", Disease),  # Remove multiple spaces
+              Disease = trimws(Disease),  # Trim leading and trailing spaces
+            ) %>%
             group_by(Disease) %>%
             tally(sort = TRUE) %>%
             slice_head(n = 10)
@@ -332,7 +357,7 @@ server <- function(input, output, session) {
                     )) %>%
               layout(
                 title = list(
-                  text = "Top 10 Diseases or Traits",
+                  text = "Top Diseases or Traits",
                   x = 0.5
                 ),
                 xaxis = list(title = "Count (Hits)"),
@@ -347,8 +372,8 @@ server <- function(input, output, session) {
               class = "summary-box",
               h4("Analysis Summary"),
               tags$ul(
-                tags$li(sprintf("Total variants analyzed: %d", nrow(values$vcf_data))),
-                tags$li(sprintf("Variants with hits: %d", nrow(values$result_data))),
+                tags$li(sprintf("Total variants analyzed: %s", format(nrow(values$vcf_data), big.mark = ","))),
+                tags$li(sprintf("Variants with hits: %s", format(nrow(values$result_data), big.mark = ","))),
                 tags$li(sprintf("Databases queried: %d", length(selected_dbs))),
                 tags$li(sprintf("P-value threshold: %.2e", pVal))
               )

@@ -2,13 +2,14 @@
 # Developer: Khunanon Chanasongkhram
 
 library(shiny)
-library(shinydashboard)
-library(shinyjs)
-library(waiter)
-library(shinyalert)
-library(DT)
-library(plotly)
-library(shinycssloaders)
+library(shinydashboard) # Create the dashboard layout
+library(shinyjs) # Show/hide elements
+library(waiter) # Show/hide loading spinner
+library(shinyalert) # Show alert messages
+library(DT) # Render data tables
+library(plotly) # Render interactive plots
+library(shinycssloaders) # Show/hide loading spinner during rendering
+library(wesanderson)
 
 ui <- dashboardPage(
   skin = "blue",
@@ -42,7 +43,7 @@ ui <- dashboardPage(
     # Custom CSS
     tags$head(
       tags$style(HTML("
-        .content-wrapper { background-color: #f4f6f9; }
+        .content-wrapper { background-color: #f4f6f9; } # Change the background color
         .box { border-top: 3px solid #0073e6; }
         .summary-box {
           padding: 15px;
@@ -185,7 +186,7 @@ ui <- dashboardPage(
               column(
                 width = 12,
                 div(class = "download-section",
-                    h4("Download Results"),
+                    h4("Download Results Table"),
                     fluidRow(
                       column(
                         width = 6,
