@@ -56,7 +56,7 @@ server <- function(input, output, session) {
     values$processing_history <- rbind(
       values$processing_history,
       data.frame(
-        timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+        timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%OS3"),
         action = action,
         status = status,
         stringsAsFactors = FALSE
@@ -277,10 +277,11 @@ server <- function(input, output, session) {
             GWASdb = "GWASdb" %in% selected_dbs,
             GRASP = "GRASP" %in% selected_dbs,
             GWASCat = "GWASCat" %in% selected_dbs,
-            GAD = "GADCDC" %in% selected_dbs,
+            GAD = "GAD" %in% selected_dbs,
             JohnO = "JohnO" %in% selected_dbs,
             ClinVar = "ClinVar" %in% selected_dbs,
             p_value = pVal,
+            merge_result = FALSE,
             runOnShiny = TRUE
           )
 
@@ -330,15 +331,14 @@ server <- function(input, output, session) {
           # Top diseases or traits
           top_diseases <- values$result_data %>%
             mutate(
-              # Standardize disease names
-              Disease = gsub("_", " ", Disease),  # Replace underscores with spaces
-              Disease = tolower(Disease),  # Convert to lowercase for uniformity
-              Disease = gsub("'s\\b", "", Disease, ignore.case = TRUE),  # Remove possessive 's
-              Disease = gsub("'$", "", Disease, ignore.case = TRUE),  # Remove stray trailing apostrophes
-              Disease = gsub("alzheimers|alzheimer'", "alzheimer", Disease, ignore.case = TRUE),  # Standardize 'alzheimer'
-              Disease = gsub("\\s*\\(.*?\\)", "", Disease),  # Remove ()
-              Disease = gsub("\\s+", " ", Disease),  # Remove multiple spaces
-              Disease = trimws(Disease),  # Trim leading and trailing spaces
+              Disease = gsub("_", " ", as.character(Disease)),  # Replace underscores with spaces inside the column of this df
+              Disease = tolower(Disease),
+              Disease = gsub("'s\\b", "", Disease, ignore.case = TRUE),
+              Disease = gsub("'$", "", Disease, ignore.case = TRUE),
+              Disease = gsub("alzheimers|alzheimer'", "alzheimer", Disease, ignore.case = TRUE),
+              Disease = gsub("\\s*\\(.*?\\)", "", Disease),
+              Disease = gsub("\\s+", " ", Disease),
+              Disease = trimws(Disease)
             ) %>%
             group_by(Disease) %>%
             tally(sort = TRUE) %>%

@@ -42,6 +42,12 @@ ui <- dashboardPage(
 
     # Custom CSS
     tags$head(
+      tags$script(HTML("
+        document.title = 'ShinyDisVar';
+      ")),
+      tags$link(rel = "icon",
+                type = "image/x-icon",
+                href = "favicon.ico"),
       tags$style(HTML("
         .content-wrapper { background-color: #f4f6f9; } # Change the background color
         .box { border-top: 3px solid #0073e6; }
@@ -107,15 +113,15 @@ ui <- dashboardPage(
                                  "GWASdb" = "GWASdb",
                                  "GRASP" = "GRASP",
                                  "GWAS Catalog" = "GWASCat",
-                                 "GADCDC" = "GADC",
+                                 "GADCDC" = "GAD",
                                  "Johnson and O'Donnell" = "JohnO",
                                  "ClinVar" = "ClinVar"
                                ),
-                               selected = c("GWASdb", "GRASP", "GWASCat", "GADC", "JohnO", "ClinVar")),
+                               selected = c("GWASdb", "GRASP", "GWASCat", "GAD", "JohnO", "ClinVar")),
 
             numericInput("pValue",
                          "P-value Threshold",
-                         value = 1e-7,
+                         value = 5e-8,
                          min = 0,
                          max = 1,
                          step = 1e-1,
