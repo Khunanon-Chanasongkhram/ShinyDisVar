@@ -12,7 +12,7 @@ ShinyDisVar is a web-based application that enables researchers and clinicians t
 - **Large-scale Analysis**: Handles up to 9.5 million variants from a single VCF file
 - **Latest Reference Genome**: Supports GRCh38/hg38 reference genome
 - **User-friendly Interface**: Web-based application with interactive visualizations
-- **Fast Processing**: Processes whole-genome VCF files in 42-59 seconds
+- **Fast Processing**: Processes whole-genome VCF files in less than a minute
 - **Cross-platform**: Server-based architecture accessible from any device with a web browser
 
 ## Supported Databases
