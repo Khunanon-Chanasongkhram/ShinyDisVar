@@ -1,0 +1,14 @@
+##fileformat=VCFv4.1
+##reference=GRCh38
+##FILTER=<ID=PASS,Description="All filters passed">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+1	832873	rs2977608	A	G	.	.	.
+2	 18506	rs13400442	A	G	.	.	.
+3	 51395	rs13077895	A	G	.	.	.
+4	192200	rs4690234	A	G	.	.	.
+5	 50583	rs112951499	A	G	.	.	.
+6	202777	rs12206347	A	G	.	.	.
+7	 49672	rs62429411	A	G	.	.	.
+8	195074901	.	A	G	.	.	.
+9	188192914	.	A	G	.	.	.
+10	183627179	.	A	G	.	.	.

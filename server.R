@@ -41,6 +41,19 @@ server <- function(input, output, session) {
     )
   )
 
+  # Disable buttons until ready
+  shinyjs::disable("runButton")
+  shinyjs::disable("downloadData")
+  shinyjs::disable("downloadExcel")
+
+  observeEvent(input$vcfFile, {
+    if (!is.null(input$vcfFile)) {
+      shinyjs::enable("runButton")
+    } else {
+      shinyjs::disable("runButton")
+    }
+  })
+
   # Download handler for test file
   output$downloadTestFile <- downloadHandler(
     filename = function() {
@@ -126,28 +139,26 @@ server <- function(input, output, session) {
   # VCF file validation function
   validate_vcf <- function(file) {
     tryCatch({
-      if (is.null(file)) {
-        return(list(valid = FALSE, message = "No file selected"))
-      }
+      if (is.null(file)) return(list(valid = FALSE, message = "No file selected"))
 
-      ext <- tools::file_ext(file$name)
+      ext <- tools::file_ext(file$name[1])
       # Check if it's a .vcf.gz file
-      if (grepl("\\.vcf\\.gz$", file$name)) {
-        ext <- "vcf.gz"
-      }
+      if (grepl("\\.vcf\\.gz$", file$name[1])) ext <- "vcf.gz"
 
       if (!ext %in% c("vcf", "vcf.gz", "gz")) {
-        return(list(valid = FALSE, message = "Invalid file type. Please upload a .vcf or .vcf.gz file."))
+        return(list(valid = FALSE, message = paste0("Invalid file type: ", file$name,
+                                                    ". Please upload .vcf or .vcf.gz files only.")))
       }
 
       # Check file size
       if (file$size > 9000*1024^2) {
-        return(list(valid = FALSE, message = "File too large. Maximum size is 9GB."))
+        return(list(valid = FALSE, message = paste0("File too large: ", file$name,
+                                                    ". Maximum size is 9GB.")))
       }
 
       # Basic header check
       first_line <- if(ext %in% c("gz", "vcf.gz")) {
-        system(sprintf("zcat '%s' | head -n 1", file$datapath), intern = TRUE)
+        system(sprintf("zcat '%s' 2>/dev/null | head -n 1", file$datapath), intern = TRUE)
       } else {
         readLines(file$datapath, n = 1)
       }
@@ -162,6 +173,24 @@ server <- function(input, output, session) {
     })
   }
 
+  # Show list of uploaded files
+  output$uploadedFilesList <- renderUI({
+    req(input$vcfFile)
+    files <- input$vcfFile
+    if (nrow(files) == 0) return(NULL)
+
+    tagList(
+      tags$p(strong(sprintf("%d file(s) uploaded:", nrow(files))),
+             style = "margin-top: 8px; margin-bottom: 4px;"),
+      tags$ul(
+        lapply(seq_len(nrow(files)), function(i) {
+          tags$li(
+            sprintf("%s (%.2f MB)", files$name[i], files$size[i] / 1024^2)
+          )
+        })
+      )
+    )
+  })
   # File preview handler
   output$vcfPreviewHeadTail <- renderDT({
     req(values$vcf_data)
@@ -188,56 +217,90 @@ server <- function(input, output, session) {
   # File upload handler with progress updates
   observeEvent(input$vcfFile, {
     w$show()
-    validation <- validate_vcf(input$vcfFile)
+    files <- input$vcfFile
 
-    if (!validation$valid) {
-      shinyalert(
-        title = "Validation Error",
-        text = validation$message,
-        type = "error"
-      )
-      w$hide()
-      return()
+    # Validate all files first
+    for (i in seq_len(nrow(files))) {
+      validation <- validate_vcf(files[i, ])
+      if (!validation$valid) {
+        shinyalert(title = "Validation Error", text = validation$message, type = "error")
+        w$hide()
+        return()
+      }
     }
 
     log_action("File Upload", "Started")
 
-    withProgress(
-      message = 'Processing VCF file...',
-      value = 0,
-      {
-        tryCatch({
-          is_gz <- grepl("\\.gz$", input$vcfFile$name)
-          # Create a new progress environment
-          local_progress <- list(
-            set = function(message, value) {
-              setProgress(value = value, message = message)
+    withProgress(message = 'Processing VCF file(s)...', value = 0, {
+      tryCatch({
+        local_progress <- list(
+          set = function(message, value) setProgress(value = value, message = message),
+          close = function() {}
+        )
+
+        n_files <- nrow(files)
+
+        if (n_files == 1) {
+          local_progress$set(message = "Reading VCF file...", value = 0.1)
+          is_gz <- isTRUE(grepl("\\.gz$", files$name[1]))
+          data <- read_vcf_with_progress(files$datapath[1], is_gz, progress_obj = local_progress)
+          if (is.null(data)) stop("Failed to read VCF file.")   # ← NULL check
+
+        } else {
+          local_progress$set(message = "Merging VCF files...", value = 0.05)
+          merged_temp <- tempfile(fileext = ".vcf")
+
+          for (i in seq_len(n_files)) {
+            local_progress$set(
+              message = sprintf("Processing file %d of %d: %s", i, n_files, files$name[i]),
+              value = 0.05 + (i - 1) / n_files * 0.6
+            )
+
+            is_gz <- isTRUE(grepl("\\.gz$", files$name[i]))
+            src <- files$datapath[i]
+
+            if (i == 1) {
+              cmd <- if (is_gz) {
+                sprintf("zcat '%s' 2>/dev/null | awk '!/^##/' >> '%s'", src, merged_temp)
+              } else {
+                sprintf("awk '!/^##/' '%s' >> '%s'", src, merged_temp)
+              }
+            } else {
+              cmd <- if (is_gz) {
+                sprintf("zcat '%s' 2>/dev/null | awk '!/^#/' >> '%s'", src, merged_temp)
+              } else {
+                sprintf("awk '!/^#/' '%s' >> '%s'", src, merged_temp)
+              }
             }
-          )
+            system(cmd)
+          }
 
-          data <- read_vcf_with_progress(input$vcfFile$datapath, is_gz, progress_obj = local_progress)
-          values$vcf_data <- data
+          if (file.info(merged_temp)$size == 0) stop("Merged VCF file is empty.")
 
-          # Update processing status
-          values$processing_status <- "File loaded successfully"
-          log_action("File Upload", "Completed")
+          local_progress$set(message = "Reading merged data...", value = 0.7)
+          data <- fread(merged_temp, header = TRUE, sep = "\t", select = 1:8, showProgress = FALSE)
+          unlink(merged_temp)
 
-          # Show success message
-          shinyalert("Success",
-                     paste("Loaded", format(nrow(data), big.mark = ","), "variants"),
-                     type = "success")
-        },
-        error = function(e) {
-          values$error_message <- e$message
-          log_action("File Upload", paste("Error:", e$message))
-          shinyalert(
-            title = "Error",
-            text = paste("Error reading file:", e$message),
-            type = "error"
-          )
-        })
-      }
-    )
+          if (is.null(data) || nrow(data) == 0) stop("No variant data could be loaded from merged file.")
+        }
+
+        values$vcf_data <- data
+        values$processing_status <- "File(s) loaded successfully"
+        log_action("File Upload", "Completed")
+
+        shinyalert("Success",
+                   paste0(
+                     if (n_files > 1) paste0(n_files, " files merged. ") else "",
+                     "Loaded ", format(nrow(data), big.mark = ","), " variants."
+                   ),
+                   type = "success")
+      },
+      error = function(e) {
+        values$error_message <- e$message
+        log_action("File Upload", paste("Error:", e$message))
+        shinyalert(title = "Error", text = paste("Error reading file(s):", e$message), type = "error")
+      })
+    })
     w$hide()
   })
 
@@ -289,6 +352,9 @@ server <- function(input, output, session) {
             stop("No variants found matching the selected criteria")
           }
 
+          aligned_df <- aligned_df[aligned_df$Disease != ".", ]
+          aligned_df$`Allele DB`[aligned_df$`Allele DB` == "NA>NA"] <- NA
+
           values$result_data <- aligned_df
           # Create interactive data table
           output$alignedPreview <- DT::renderDataTable({
@@ -304,7 +370,7 @@ server <- function(input, output, session) {
                 scrollX = TRUE,
                 pageLength = 10,
                 dom = 'lftip'
-                ),
+              ),
               class = 'cell-border stripe'
             )
           })
@@ -329,19 +395,45 @@ server <- function(input, output, session) {
           })
 
           # Top diseases or traits
-          top_diseases <- values$result_data %>%
+          all_diseases <- values$result_data %>%
+            filter(!is.na(Disease)) %>%
             mutate(
-              Disease = gsub("_", " ", as.character(Disease)),  # Replace underscores with spaces inside the column of this df
+              Disease = gsub("_", " ", as.character(Disease)),
               Disease = tolower(Disease),
-              Disease = gsub("'s\\b", "", Disease, ignore.case = TRUE),
+              Disease = gsub("'s\\b|s'\\b", "", Disease, ignore.case = TRUE),
               Disease = gsub("'$", "", Disease, ignore.case = TRUE),
-              Disease = gsub("alzheimers|alzheimer'", "alzheimer", Disease, ignore.case = TRUE),
               Disease = gsub("\\s*\\(.*?\\)", "", Disease),
               Disease = gsub("\\s+", " ", Disease),
-              Disease = trimws(Disease)
+              Disease = trimws(Disease),
+              # Strip leading/trailing special characters (%, #, -, etc.)
+              Disease = gsub("^[^a-z0-9]+|[^a-z0-9]+$", "", Disease),
+              # Synonym normalisation
+              Disease = case_when(
+                grepl("\\bt2d\\b|type 2 diabet|type ii diabet|non.insulin.dependent diabet", Disease) ~ "type 2 diabetes",
+                grepl("\\bt1d\\b|type 1 diabet|type i diabet|insulin.dependent diabet", Disease) ~ "type 1 diabetes",
+                grepl("alzheimer", Disease) ~ "alzheimer's disease",
+                grepl("\\bbmi\\b|body mass index|obesity|overweight", Disease) ~ "bmi / obesity",
+                grepl("systolic blood pressure|diastolic blood pressure|hypertension|blood pressure", Disease) ~ "blood pressure / hypertension",
+                grepl("ldl|hdl|triglycerid|cholesterol|lipid", Disease) ~ "lipid levels / cholesterol",
+                grepl("coronary artery disease|coronary heart disease|\\bcad\\b|\\bchd\\b", Disease) ~ "coronary artery disease",
+                grepl("schizophrenia", Disease) ~ "schizophrenia",
+                grepl("parkinson", Disease) ~ "parkinson's disease",
+                grepl("breast cancer", Disease) ~ "breast cancer",
+                grepl("prostate cancer", Disease) ~ "prostate cancer",
+                grepl("colorectal cancer|colon cancer", Disease) ~ "colorectal cancer",
+                grepl("rheumatoid arthritis", Disease) ~ "rheumatoid arthritis",
+                grepl("crohn|inflammatory bowel|ulcerative colitis", Disease) ~ "inflammatory bowel disease",
+                grepl("multiple sclerosis", Disease) ~ "multiple sclerosis",
+                grepl("atrial fibrillation", Disease) ~ "atrial fibrillation",
+                grepl("stroke|cerebrovascular", Disease) ~ "stroke",
+                TRUE ~ Disease
+              )
             ) %>%
+            filter(Disease != "", !is.na(Disease)) %>%
             group_by(Disease) %>%
-            tally(sort = TRUE) %>%
+            tally(sort = TRUE)
+
+          top_diseases <- all_diseases %>%
             slice_head(n = 10)
 
           output$top_diseases <- renderPlotly({
@@ -366,13 +458,34 @@ server <- function(input, output, session) {
               )
           })
 
+          output$downloadDiseasesData <- downloadHandler(
+            filename = function() paste0("diseases_traits_", Sys.Date(), ".tsv"),
+            content = function(file) {
+              write.table(
+                all_diseases %>% rename("Disease/Trait" = Disease, "Count" = n),
+                file, sep = "\t", row.names = FALSE, quote = FALSE
+              )
+            }
+          )
+
+          output$downloadVariantsDB <- downloadHandler(
+            filename = function() paste0("variants_per_database_", Sys.Date(), ".tsv"),
+            content = function(file) {
+              variants_db <- values$result_data %>%
+                group_by(DB) %>%
+                tally(sort = TRUE) %>%
+                rename("Database" = DB, "Count" = n)
+              write.table(variants_db, file, sep = "\t", row.names = FALSE, quote = FALSE)
+            }
+          )
+
           # Update result summary
           output$resultSummary <- renderUI({
             div(
               class = "summary-box",
               h4("Analysis Summary"),
               tags$ul(
-                tags$li(sprintf("Total variants analyzed: %s", format(nrow(values$vcf_data), big.mark = ","))),
+                tags$li(sprintf("Total variants analysed: %s", format(nrow(values$vcf_data), big.mark = ","))),
                 tags$li(sprintf("Variants with hits: %s", format(nrow(values$result_data), big.mark = ","))),
                 tags$li(sprintf("Databases queried: %d", length(selected_dbs))),
                 tags$li(sprintf("P-value threshold: %.2e", pVal))
@@ -381,8 +494,8 @@ server <- function(input, output, session) {
           })
 
           # Enable download buttons
-          shinyjs::show("downloadData")
-          shinyjs::show("downloadExcel")
+          shinyjs::enable("downloadData")
+          shinyjs::enable("downloadExcel")
 
           log_action("Analysis", "Completed")
           local_progress$set(message = "Analysis complete!", value = 1)

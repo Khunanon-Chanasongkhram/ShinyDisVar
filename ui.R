@@ -48,6 +48,48 @@ ui <- dashboardPage(
       tags$link(rel = "icon",
                 type = "image/x-icon",
                 href = "favicon.ico"),
+
+      # SEO meta tags
+      tags$meta(charset = "UTF-8"),
+      tags$meta(name = "description",
+                content = "ShinyDisVar is a web application for querying genetic variants and their associations with diseases and traits. Upload a VCF file to analyze variants across multiple GWAS and clinical databases including GWASdb, GRASP, GWAS Catalog, ClinVar, and more."),
+      tags$meta(name = "keywords",
+                content = "ShinyDisVar, genetic variants, VCF analysis, GWAS, disease associations, bioinformatics, DisVar, SNP, ClinVar, GWAS Catalog, variant annotation, genomics"),
+      tags$meta(name = "author", content = "Khunanon Chanasongkhram"),
+      tags$meta(name = "robots", content = "index, follow"),
+      tags$link(rel = "canonical", href = "https://bioinformatics-shinydisvar.shinyapps.io/ShinyDisVar/"),
+
+      # Open Graph (Facebook, LinkedIn previews)
+      tags$meta(property = "og:type", content = "website"),
+      tags$meta(property = "og:url", content = "https://bioinformatics-shinydisvar.shinyapps.io/ShinyDisVar/"),
+      tags$meta(property = "og:title", content = "ShinyDisVar — Genetic Variant Disease Association Tool"),
+      tags$meta(property = "og:description",
+                content = "Upload a VCF file to query genetic variants against GWASdb, GRASP, GWAS Catalog, ClinVar, and more. Visualize top disease associations and download results."),
+      tags$meta(property = "og:image", content = "https://bioinformatics-shinydisvar.shinyapps.io/ShinyDisVar/ShinyDisVar_logo.gif"),
+
+      # Twitter Card
+      tags$meta(name = "twitter:card", content = "summary"),
+      tags$meta(name = "twitter:title", content = "ShinyDisVar — Genetic Variant Disease Association Tool"),
+      tags$meta(name = "twitter:description",
+                content = "Upload a VCF file to query genetic variants against GWASdb, GRASP, GWAS Catalog, ClinVar, and more. Visualize top disease associations and download results."),
+
+      # Structured data (JSON-LD) for Google
+      tags$script(type = "application/ld+json", HTML('
+        {
+          "@context": "https://schema.org",
+          "@type": "WebApplication",
+          "name": "ShinyDisVar",
+          "url": "https://bioinformatics-shinydisvar.shinyapps.io/ShinyDisVar/",
+          "description": "A Shiny-based web application for querying genetic variants and their associations with diseases and traits. Integrates with the DisVar R package and provides a user-friendly interface for analyzing VCF files.",
+          "applicationCategory": "Bioinformatics",
+          "operatingSystem": "Web",
+          "author": {
+            "@type": "Person",
+            "name": "Khunanon Chanasongkhram"
+          },
+          "keywords": "genetic variants, VCF, GWAS, disease associations, bioinformatics, SNP, ClinVar, genomics"
+        }
+      ')),
       tags$style(HTML("
         .content-wrapper { background-color: #f4f6f9; } # Change the background color
         .box { border-top: 3px solid #0073e6; }
@@ -89,6 +131,21 @@ ui <- dashboardPage(
           background: #fff;
           border-radius: 5px;
         }
+        #runButton:disabled, #downloadData:disabled, #downloadExcel:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+          pointer-events: all !important;
+        }
+        .btn-download {
+          display: block;
+          width: 100%;
+          padding: 10px 16px;
+          font-size: 15px;
+          font-weight: 600;
+          border-radius: 5px;
+          text-align: center;
+          margin-top: 8px;
+        }
       "))
     ),
 
@@ -103,9 +160,11 @@ ui <- dashboardPage(
             status = "primary",
             solidHeader = TRUE,
 
-            fileInput("vcfFile", "Upload VCF File",
+            fileInput("vcfFile", "Upload VCF File(s)",
                       accept = c(".vcf", ".vcf.gz"),
-                      multiple = FALSE),
+                      multiple = TRUE),
+
+            uiOutput("uploadedFilesList"),
 
             checkboxGroupInput("databases",
                                "Select Databases",
@@ -175,36 +234,17 @@ ui <- dashboardPage(
               column(
                 width = 6,
                 div(class = "plot-container",
-                    h4("Variants per Database"),
-                    withSpinner(plotlyOutput("variants_hits"))
+                    h4("Top Diseases/Traits"),
+                    withSpinner(plotlyOutput("top_diseases")),
+                    downloadButton("downloadDiseasesData", "Download Diseases/Traits TSV", class = "btn-primary btn-download")
                 )
               ),
               column(
                 width = 6,
                 div(class = "plot-container",
-                    h4("Top Diseases/Traits"),
-                    withSpinner(plotlyOutput("top_diseases"))
-                )
-              )
-            ),
-
-            fluidRow(
-              column(
-                width = 12,
-                div(class = "download-section",
-                    h4("Download Results Table"),
-                    fluidRow(
-                      column(
-                        width = 6,
-                        downloadButton("downloadData", "Download TSV",
-                                       class = "btn-primary btn-block")
-                      ),
-                      column(
-                        width = 6,
-                        downloadButton("downloadExcel", "Download Excel",
-                                       class = "btn-primary btn-block")
-                      )
-                    )
+                    h4("Variants per Database"),
+                    withSpinner(plotlyOutput("variants_hits")),
+                    downloadButton("downloadVariantsDB", "Download Variants per Database TSV", class = "btn-primary btn-download")
                 )
               )
             ),
@@ -213,7 +253,20 @@ ui <- dashboardPage(
               column(
                 width = 12,
                 h4("Results Preview"),
-                withSpinner(DTOutput("alignedPreview"))
+                withSpinner(DTOutput("alignedPreview")),
+                br(),
+                fluidRow(
+                  column(
+                    width = 6,
+                    downloadButton("downloadData", "Download Results TSV",
+                                   class = "btn-primary btn-download")
+                  ),
+                  column(
+                    width = 6,
+                    downloadButton("downloadExcel", "Download Results Excel",
+                                   class = "btn-primary btn-download")
+                  )
+                )
               )
             )
           )
@@ -311,9 +364,9 @@ ui <- dashboardPage(
             status = "primary",
             solidHeader = TRUE,
             tags$p(
-              strong("ShinyDisVar Version:"), "alpha 0.3.0",
+              strong("ShinyDisVar Version:"), "1.1.0",
               tags$br(),
-              strong("Last Updated:"), "2024-03-20",
+              strong("Last Updated:"), "2026-05-15",
               tags$br(),
               strong("Developer:"), "Khunanon Chanasongkhram",
               tags$br(),
@@ -336,9 +389,9 @@ ui <- dashboardPage(
             solidHeader = TRUE,
             p("For any inquiries or feedback, please contact the developer at:"),
             p(tags$a(href = "mailto:Chanasongkhram.k@gmail.com", "Email: Chanasongkhram.k@gmail.com")),
-            p(tags$a(href = "https://github.com/Khunanon-Chanasongkhram/DisVar",
+            p(tags$a(href = "https://github.com/Khunanon-Chanasongkhram/ShinyDisVar",
                      target = "_blank",
-                     "GitHub: https://github.com/Khunanon-Chanasongkhram/DisVar"))
+                     "GitHub: https://github.com/Khunanon-Chanasongkhram/ShinyDisVar"))
           )
         )
       )

@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-.Rproj.user
-.Rhistory
-.RData
-.Ruserdata
-=======
 # History files
 .Rhistory
 .Rapp.history
@@ -53,4 +47,6 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
->>>>>>> 05d74d240d517318b957f31fc21c60c9f3bc64af
+
+# Large combined VCF (exceeds GitHub 100 MB limit)
+real_world_clinical_data/whole_genome_Individuals_vcf/combined.vcf.gz
